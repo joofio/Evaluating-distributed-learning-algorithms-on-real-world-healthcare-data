@@ -1,50 +1,17 @@
-import re
-import sys
-import warnings
-from collections import Counter, defaultdict
-
-import federated_eval_helper_functions
 import matplotlib as mpl
-import matplotlib.font_manager as fm
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-import statsmodels.stats.api as sms
-from imblearn.over_sampling import ADASYN, SMOTE, SVMSMOTE, RandomOverSampler
-from IPython.display import Audio
+from imblearn.over_sampling import RandomOverSampler
 from matplotlib import pyplot as plt
 from mlxtend.classifier import EnsembleVoteClassifier, StackingClassifier
-from pylab import cm
 from scipy.stats import ttest_ind
-from sklearn import set_config
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import BayesianRidge, LogisticRegression, SGDClassifier
-from sklearn.ensemble import AdaBoostClassifier
 from sklearn.metrics import (
     accuracy_score,
-    balanced_accuracy_score,
-    classification_report,
-    confusion_matrix,
-    f1_score,
-    multilabel_confusion_matrix,
-    plot_confusion_matrix,
     roc_auc_score,
 )
-from sklearn.model_selection import (
-    GridSearchCV,
-    KFold,
-    RepeatedKFold,
-    RepeatedStratifiedKFold,
-    StratifiedKFold,
-    cross_val_score,
-    train_test_split,
-)
-import statistics
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import (
     FunctionTransformer,
@@ -52,135 +19,12 @@ from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
     OrdinalEncoder,
-    StandardScaler,
 )
 import os
 import zipfile
-
-import glob
 import pickle
-import json
 from itertools import compress
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-import matplotlib as mpl
-import numpy as np
-import pandas as pd
-import scipy.stats as st
-from matplotlib import pyplot as plt
-from mlxtend.classifier import EnsembleVoteClassifier, StackingClassifier
-from scipy.stats import ttest_ind
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.linear_model import BayesianRidge, LogisticRegression, SGDClassifier
-
 from datetime import datetime
-
-from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.preprocessing import (
-    FunctionTransformer,
-    LabelBinarizer,
-    LabelEncoder,
-    OneHotEncoder,
-    OrdinalEncoder,
-    StandardScaler,
-)
-
-
-# helper functions federeated eval
-
-
-def plot_paper_grade_error(final):
-
-    label_l = [
-        x.replace("_local", "").replace("_global", "").replace("roc_auc_score", "auc")
-        for x in list(final.keys())
-    ]
-    # label_l=label[0::2]
-    metrics = ["_".join(l.split("_")[-1:]) for l in label_l]
-    col_name = ["_".join(l.split("_")[0:-2]) for l in label_l]
-    metric_silo = ["_".join(l.split("_")[-2:]) for l in label_l]
-    nr_plots = len(set(col_name))
-    if nr_plots == 1:
-        return plot_better_error(
-            final
-        )  # workaround pq n m apetece rever isto dos multiplos plots
-    figheight = 5 * len(set(metrics)) * nr_plots
-    fig, axs = plt.subplots(nr_plots, 1, figsize=(12, figheight))
-    x_ticks_1 = metric_silo[0::2]
-    x_ticks_2 = metric_silo[1::2]
-    mean = [x[0] for x in final.values()]
-    x_1 = mean[0::2]
-    x_2 = mean[1::2]
-    cis = [x[1][1] - x[0] for x in final.values()]
-    length = len(set(metric_silo))
-    #    print(length)
-    err_1 = cis[0::2]
-    err_2 = cis[1::2]
-    l_col_name = np.unique(np.array(col_name))
-
-    for idx, ax in enumerate(axs):
-        ax.set_title("Scores by silo for " + str(l_col_name[idx]) + " 95% CI", pad=-3)
-
-        ax.spines["top"].set_visible(False)
-        ax.set_ylabel("Silo and metric", labelpad=1)
-        ax.set_xlabel("Metric value", labelpad=-1)
-        ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.25))
-        ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(0.1))
-        ax.yaxis.set_ticks_position("both")
-
-        l_err_1 = err_1[length * idx : length * (idx + 1)]
-        l_err_2 = err_2[length * idx : length * (idx + 1)]
-
-        l_x_1 = x_1[length * idx : length * (idx + 1)]
-        l_x_2 = x_2[length * idx : length * (idx + 1)]
-
-        ax_height = len(l_x_1)
-        l_y_1 = np.linspace(0, ax_height, len(l_x_1))
-        l_y_2 = l_y_1 + 0.25
-        l_y_label = l_y_1 + 0.12
-
-        l_x_ticks_1 = x_ticks_1[length * idx : length * (idx + 1)]
-        l_x_ticks_2 = x_ticks_2[length * idx : length * (idx + 1)]
-
-        ax.set_xlim(-0.05, 1.03)
-        ax.set_ylim(-1, ax_height + 3)
-        b1 = ax.errorbar(
-            x=l_x_1,
-            y=l_y_1,
-            xerr=l_err_1,
-            color="orange",
-            capsize=3,
-            linestyle="None",
-            marker="s",
-            markersize=4,
-            mfc="orange",
-            mec="orange",
-        )
-
-        g1 = ax.errorbar(
-            x=l_x_2,
-            y=l_y_2,
-            xerr=l_err_2,
-            color="blue",
-            capsize=3,
-            linestyle="None",
-            marker="s",
-            markersize=4,
-            mfc="blue",
-            mec="blue",
-        )
-        #    print(l_x_ticks_1)
-        ax.set_yticks(l_y_label)
-        ax.set_yticklabels(l_x_ticks_1)
-        ax.tick_params(labelright=False)
-        ax.yaxis.grid(True, which="major", linestyle="--", color="gray", alpha=0.5)
-        # ax.yaxis.grid(True, which='minor')
-        ax.legend([b1, (b1, g1)], ["Local", "Global"], loc=2)
-        ax.axvline(0.50, ls="--")
-        plt.savefig("teste.png", dpi=300, transparent=False, bbox_inches="tight")
-    # plt.show()
-    plt.show()
 
 
 def log_to_file(f, content):
@@ -193,81 +37,12 @@ def log_to_file(f, content):
     f.write(" ".join(c) + "\n")
 
 
-def create_mega_table(total, method):
-    total_rec = []
-    for k, v in total.items():
-        rec = {"method": method, "column": k}
-        for k2, v2 in v.items():
-
-            if "model" not in k2:
-                #  print(k,k2,v2)
-                mean = np.nanmean(v2)
-                rec[k2 + "_mean"] = mean
-                rec[k2 + "_sd"] = np.nanstd(v2)
-
-        total_rec.append(rec)
-    df = pd.DataFrame.from_dict(total_rec)
-    value_vars = list(
-        compress(df.columns.to_list(), ["silo" in k for k in df.columns.to_list()])
-    )
-    df = pd.melt(df, id_vars=["method", "column"], value_vars=value_vars)
-
-    def get_metric(x):
-        if "f1" in x:
-            return "F1"
-        if "auc" in x:
-            return "AUC"
-        if "auprc" in x:
-            return "AUPRC"
-
-    df["metric"] = df["variable"].apply(get_metric)
-
-    def get_silo(x):
-        return x[4]
-
-    df["silo"] = df["variable"].apply(get_silo)
-
-    def get_stat(x):
-        return x.split("_")[-1]
-
-    df["stat"] = df["variable"].apply(get_stat)
-
-    def get_model(x):
-        return x.split("_")[-2]
-
-    df["model"] = df["variable"].apply(get_model)
-
-    df.drop(columns=["variable"], inplace=True)
-    df2 = df.pivot(
-        index=["method", "column", "metric", "stat", "model"],
-        columns="silo",
-        values="value",
-    ).reset_index()
-    df3 = df2.pivot(
-        index=["method", "column", "metric", "model"],
-        columns="stat",
-        values=["1", "2", "3", "4", "5", "6", "7", "8", "9"],
-    ).reset_index()
-    newcol_name = df3.columns.to_list()
-
-    def create_col_name(x):
-        if x[1] in ["mean", "sd"]:
-            return "silo_" + x[0] + "_" + x[1]
-        else:
-            return x[0]
-
-    newercol_name = [create_col_name(v) for v in newcol_name]
-
-    df3.columns = newercol_name
-    return df3
-
-
 def from_dict_to_df_raw(total, method):
     total_rec = []
     for k, v in total.items():
         target = k
         for k2, v2 in v.items():
-            ilo_metric_model = k2
+            # ilo_metric_model = k2
             l = k2.split("_")
             silo = l[0]
             metric = "_".join(l[1:-1])
@@ -309,20 +84,6 @@ def load_model_from_zip(filename):
     return model
 
 
-def create_multirow_latex(cell):
-    n_c = cell.replace("_", " ").lower()
-    if len(cell) > 20:
-        return (
-            "\\begin{tabular}{@{}l@{}}"
-            + n_c[0:10]
-            + "\\\\"
-            + n_c[10:]
-            + "\\end{tabular}"
-        )
-    else:
-        return n_c
-
-
 def create_target(y, op="encoder"):
     if op == "binarizer":
         l = LabelBinarizer()
@@ -357,7 +118,7 @@ def create_pipeline_with_y(
     def to_number(x):
         return pd.DataFrame(x).astype(float)
 
-    if pipeline == None:
+    if pipeline is None:
         fun_str = FunctionTransformer(to_object)
         fun_num = FunctionTransformer(to_number)
 
@@ -393,15 +154,15 @@ def create_pipeline_with_y(
 
         y = data[target]
         X = n_df
-        y_pipe = make_pipeline(
-            SimpleImputer(
-                missing_values=np.nan, strategy="constant", fill_value="NULLIMP"
-            )
-        )
+        # y_pipe = make_pipeline(
+        #     SimpleImputer(
+        #          missing_values=np.nan, strategy="constant", fill_value="NULLIMP"
+        #      )
+        #   )
         yy, l = create_target(y, op=op)
         XX = pipeline.fit_transform(X)
 
-        if as_df == True:
+        if as_df is True:
             col_list = (
                 pipeline["preprocessor"].transformers_[0][2]  # changes col location
                 + pipeline["preprocessor"].transformers_[1][2]
@@ -618,6 +379,7 @@ def get_best_threshold(model, X_list, y_list):
     return b_threshold, best
 
 
+# check
 def define_weights(grid_list):
     i = 0
     result_list = []
@@ -659,132 +421,7 @@ def get_stats(
     return final
 
 
-def plot_error(final):
-    plt.figure(figsize=(8, 20))
-    for k, v in final.items():
-        plt.plot((v[1][0], v[1][1]), (k, k), "ro-", color="orange")
-
-
-def plot_boxplot(final):
-    plt.figure(figsize=(8, 20))
-
-    label = [k for k in final.keys()]
-    median = [v[0] for v in final.values()]
-    ci = [v[1] for v in final.values()]
-    plt.boxplot(
-        total_values,
-        notch=False,
-        conf_intervals=np.array(ci),
-        usermedians=median,
-        vert=False,
-        labels=label,
-    )
-
-
-def plot_better_error(final):
-    plt.figure(figsize=(8, 20))
-
-    label_l = [
-        x.replace("_local", "").replace("_global", "").replace("roc_auc_score", "auc")
-        for x in list(final.keys())
-    ]
-    #  metrics=["_".join(l.split("_")[-1:]) for l in label_l]
-    # silo_nr=["_".join(l.split("_")[-2:-1]) for l in label_l]
-    col_name = ["_".join(l.split("_")[0:-2]) for l in label_l]
-    metric_silo = ["_".join(l.split("_")[-2:]) for l in label_l]
-    # print(col_name)
-    height = len(label_l) // 12
-    plt.figure(figsize=(12, 8 + height))
-    #   plt.title('Scores by target, model and silo')
-    ax = plt.axes()
-    ax.set_xlim(-0.05, 1.02)
-    ax.set_ylim(-0.5, 18)
-    # ax.spines['right'].set_visible(False)
-    ax.spines["top"].set_visible(False)
-    ax.set_ylabel("Target with Model", labelpad=3)
-    ax.set_xlabel("Metric value", labelpad=3)
-    # ax.set_xticklabels(['0','2.5','5','7.5','1'])
-    ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.25))
-    ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(0.1))
-
-    # plt.show()
-    x_ticks_1 = label_l[0::2]
-    x_ticks_2 = label_l[1::2]
-
-    mean = [x[0] for x in final.values()]
-    x_1 = mean[0::2]
-    x_2 = mean[1::2]
-    cis = [x[1][1] - x[0] for x in final.values()]
-    y_1 = np.arange(0, len(x_1))
-    print(y_1)
-    y_2 = y_1 + 0.18
-    print(y_2)
-
-    err_1 = cis[0::2]
-    err_2 = cis[1::2]
-
-    b1 = plt.errorbar(
-        x=x_1,
-        y=y_1,
-        xerr=err_1,
-        color="black",
-        capsize=3,
-        linestyle="None",
-        marker="s",
-        markersize=4,
-        mfc="black",
-        mec="black",
-    )
-
-    g1 = plt.errorbar(
-        x=x_2,
-        y=y_2,
-        xerr=err_2,
-        color="gray",
-        capsize=3,
-        linestyle="None",
-        marker="s",
-        markersize=4,
-        mfc="gray",
-        mec="gray",
-    )
-    plt.yticks(y_1, x_ticks_1)
-    plt.yticks(y_2, x_ticks_2)
-    plt.legend([b1, (b1, g1)], ["Local", "Global"], loc=2)
-    plt.tight_layout()
-    ax.yaxis.grid(True, which="major", linestyle="--", color="gray", alpha=0.5)
-
-    plt.axvline(0.50, ls="--")
-    # plt.show()
-    plt.savefig("teste.png", dpi=300, transparent=False, bbox_inches="tight")
-
-
-def get_ttest(x):
-    final = {}
-    for k, d in x.items():
-        final[k] = []
-        mylist = [t for k, t in d.items() if k not in ["models", "g_model"]]
-        labels = [k for k, t in d.items() if k not in ["models", "g_model"]]
-        l = labels[1::2]
-        zipped = list(zip(mylist[0::2], mylist[1::2]))
-        i = 0
-        for t in zipped:
-
-            ttest, pval = ttest_ind(t[0], t[1], nan_policy="omit")
-            #     print(pval)
-            final[k].append(
-                {
-                    "name": l[i][0:-7],
-                    "mean1": np.nanmean(t[0]),
-                    "mean2": np.nanmean(t[1]),
-                    "pvalue": pval,
-                    "outcome": "equal" if pval >= 0.05 else "not equal",
-                }
-            )
-            i += 1
-    return final
-
-
+# check
 # deal with missing classes and low frequency classes:
 # low frequency - smote
 # non-existing: create dummy with median/most frequent
@@ -824,41 +461,13 @@ def dummy_row_creation(data, target, target_value, int_cols, cat_cols, nr_rows):
     return df1
 
 
-def evaluate_variables_and_transform_variables(
-    df, target, int_cols, cat_cols, class_list=None, threshold=12, nr_rows=25
-):
-    if class_list:
-        missing_class = list(set(class_list) - set(df[target].unique()))
-        if len(missing_class) > 0:
-            print("missing class:", missing_class)
-            for c in missing_class:
-                df = dummy_row_creation(df, target, c, int_cols, cat_cols, nr_rows)
-    s = df[target].value_counts().le(threshold)
-    to_smote = list(s[s].index.values)
-    #   print("vars to be enhanced",to_smote)
-    # transform the dataset
-    y = df[target]
-    X = df.drop(columns=[target])
-    if len(to_smote) > 0:
-        smote_params = {}
-        for e in to_smote:
-            smote_params[e] = nr_rows
-        ros = RandomOverSampler(random_state=0, sampling_strategy=smote_params)
-
-        X_resampled, y_resampled = ros.fit_resample(X, y)
-        # if not present
-        return X_resampled, y_resampled
-    else:
-        return X, y
-
-
 def prepare_global_model(g_model, X_train, y_train):
     if type(g_model) == StackingClassifier:
         return g_model.fit(X_train, y_train)
     elif type(g_model) == EnsembleVoteClassifier:
         return g_model.fit(X_train, y_train)
     else:
-        threshold = get_best_threshold(global_model, [X_train], [y_train])
+        threshold = get_best_threshold(g_model, [X_train], [y_train])
         g_model.tune_estimator_weights([X_train], [y_train], scoring="roc_auc_score")
         g_model.set_threshold(threshold[0])
         return g_model
